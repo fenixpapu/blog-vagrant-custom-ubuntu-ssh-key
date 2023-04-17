@@ -1,6 +1,12 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+
+BOX_NAME =  ENV['BOX_NAME'] || "ubuntu/focal64"
+BOX_MEM = ENV['BOX_MEM'] || "1024"
+BOX_CPUS = ENV['BOX_CPUS'] || "2"
+CLUSTER_HOSTS = ENV['CLUSTER_HOSTS'] || "vagrant_hosts"
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -67,4 +73,38 @@ Vagrant.configure("2") do |config|
   #   apt-get update
   #   apt-get install -y apache2
   # SHELL
+
+
+  config.vm.define "node1", primary: true do |node1_config|
+    node1_config.vm.box = "ubuntu/focal64"
+    node1_config.vm.hostname = "node1"
+    node1_config.ssh.shell = "/bin/sh"
+    node1_config.ssh.forward_agent = true
+    node1_config.vm.network :private_network, ip: "192.168.56.235"
+    #node1_config.vm.network "forwarded_port", guest: 22, host: 2252
+    node1_config.vm.boot_timeout = 360
+    node1_config.vm.provider "virtualbox" do |vb|
+      vb.name = "node1"
+      vb.memory = BOX_MEM
+      vb.cpus = BOX_CPUS
+      vb.customize ["modifyvm", :id, "--uartmode1", "file", File::NULL] # https://bugs.launchpad.net/cloud-images/+bug/1874453
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    end
+    node1_config.vm.provision :hosts do |provisioner|
+      provisioner.sync_hosts = false
+      provisioner.add_localhost_hostnames = false
+      provisioner.add_host '192.168.56.235', ['node1']
+      provisioner.add_host '192.168.56.236', ['node2']
+      provisioner.add_host '192.168.56.237', ['node3']
+      #provisioner.add_host '192.168.122.27', ['dc2p-mssql-master.citigo.io']
+    end
+    config.vm.provision "shell" do |s|
+        ssh_pub_key = File.readlines("#{Dir.home}/.ssh/id_rsa.pub").first.strip
+        s.inline = <<-SHELL
+          echo #{ssh_pub_key} >> /home/vagrant/.ssh/authorized_keys
+          echo #{ssh_pub_key} >> /root/.ssh/authorized_keys
+        SHELL
+    end
+  end
 end
